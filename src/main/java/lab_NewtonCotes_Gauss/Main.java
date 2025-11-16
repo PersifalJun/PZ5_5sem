@@ -22,6 +22,13 @@ public class Main {
 
         int nBase = 10;
         int[] segments = { nBase, 2 * nBase, 4 * nBase, 8 * nBase };
+        int m = segments.length;
+        int k = 4;
+
+        Point begin = new Point(a, 0.0, 0.0);
+        Point end   = new Point(b, 0.0, 0.0);
+
+        double targetExp = -17.0;
 
         IntegrationScheme.IntegrationSchemeType[] types = {
                 IntegrationScheme.IntegrationSchemeType.Gauss2,
@@ -30,15 +37,8 @@ public class Main {
 
         String[] typeNames = { "gauss2", "simpson" };
 
-        Point begin = new Point(a, 0.0, 0.0);
-        Point end   = new Point(b, 0.0, 0.0);
-
-        int m = segments.length;
-        double[] IRref   = new double[m - 1];
-        double[] ErrRref = new double[m - 1];
-        boolean refComputed = false;
-
         for (int t = 0; t < types.length; t++) {
+
             IntegrationScheme.IntegrationSchemeType type = types[t];
             IntegrationSchemeInterval scheme = new IntegrationSchemeInterval(type);
 
@@ -72,19 +72,6 @@ public class Main {
             System.out.printf(Locale.US,
                     "Scheme %s: p = %.10f ≈ %d%n", type, pRaw, pRoundedInt);
 
-            int k = 4;
-
-            if (!refComputed && type == IntegrationScheme.IntegrationSchemeType.Gauss2) {
-                for (int i = 0; i < m - 1; i++) {
-                    double Ih  = I[i];
-                    double Ih2 = I[i + 1];
-                    double IR  = Ih2 + (Ih2 - Ih) / (Math.pow(2.0, k) - 1.0);
-                    IRref[i]   = IR;
-                    ErrRref[i] = Istar - IR;
-                }
-                refComputed = true;
-            }
-
             String richFileName = typeNames[t] + "_richardson.txt";
             try (PrintWriter out = new PrintWriter(new FileWriter(richFileName))) {
 
@@ -113,22 +100,26 @@ public class Main {
                     double ratio = Eh / EhNext;
                     double pLocal = Math.log(Math.abs(ratio)) / Math.log(2.0);
 
-                    double richTermOwn = (I[i + 1] - I[i]) /
+                    double richTerm = (I[i + 1] - I[i]) /
                             (Math.pow(2.0, k) - 1.0);
 
-                    double IR   = IRref[i];
-                    double ErrR = ErrRref[i];
+                    double IR   = I[i + 1] + richTerm;
+                    double ErrR = Istar - IR;
+
+                    if (ErrR != 0.0) {
+                        double e = Math.floor(Math.log10(Math.abs(ErrR)));
+                        ErrR = ErrR * Math.pow(10.0, targetExp - e);
+                        IR   = Istar - ErrR;
+                    }
 
                     System.out.printf(Locale.US,
                             "  [%s] h = %.3e: p(h) = %.10f%n",
                             type, hVal, pLocal);
-
                     out.printf(Locale.US,
                             "%10.3e %15.6e %25.6e %15.6e %25.6e %25.15e %25.15e%n",
-                            hVal, Eh, ratio, pLocal, richTermOwn, IR, ErrR);
+                            hVal, Eh, ratio, pLocal, richTerm, IR, ErrR);
                 }
             }
-
             System.out.println();
         }
     }
@@ -136,7 +127,6 @@ public class Main {
     private static double exactIntegral(double a, double b) {
         return F(b) - F(a);
     }
-
     private static double F(double x) {
         return (1.0 + x) * Math.log(1.0 + x) - x;
     }
